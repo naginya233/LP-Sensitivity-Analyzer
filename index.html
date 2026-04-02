@@ -1,0 +1,1648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LP Sensitivity Analyzer · 线性规划灵敏度分析</title>
+<style>
+  /* ===== CSS Variables & Reset ===== */
+  :root {
+    --bg: #F5F5F7;
+    --surface: #FFFFFF;
+    --surface-blur: rgba(255,255,255,0.72);
+    --border: rgba(0,0,0,0.08);
+    --border-strong: rgba(0,0,0,0.15);
+    --text-primary: #1D1D1F;
+    --text-secondary: #6E6E73;
+    --text-tertiary: #AEAEB2;
+    --accent: #0071E3;
+    --accent-light: rgba(0,113,227,0.12);
+    --accent-pulse: rgba(0,113,227,0.35);
+    --green: #34C759;
+    --green-light: rgba(52,199,89,0.12);
+    --orange: #FF9500;
+    --orange-light: rgba(255,149,0,0.12);
+    --red: #FF3B30;
+    --purple: #AF52DE;
+    --purple-light: rgba(175,82,222,0.12);
+    --teal: #5AC8FA;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04);
+    --shadow-lg: 0 12px 40px rgba(0,0,0,0.10), 0 4px 12px rgba(0,0,0,0.06);
+    --radius-sm: 10px;
+    --radius-md: 16px;
+    --radius-lg: 20px;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "SF Mono", "Fira Code", "Menlo", monospace;
+    --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-spring: 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== Layout ===== */
+  .app-header {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--surface-blur);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 52px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .header-left { display: flex; align-items: center; gap: 12px; }
+
+  .app-icon {
+    width: 28px; height: 28px; border-radius: 7px;
+    background: linear-gradient(135deg, #0071E3 0%, #40C8E0 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+
+  .app-title {
+    font-size: 15px; font-weight: 600; letter-spacing: -0.2px;
+    color: var(--text-primary);
+  }
+
+  .app-subtitle {
+    font-size: 12px; color: var(--text-secondary);
+    font-weight: 400; letter-spacing: 0.1px;
+  }
+
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 20px;
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    cursor: pointer; border: none; transition: var(--transition-fast);
+    white-space: nowrap;
+  }
+  .btn-ghost {
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--border-strong);
+  }
+  .btn-ghost:hover {
+    background: var(--surface); color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #0077ED; box-shadow: 0 4px 12px rgba(0,113,227,0.3); }
+  .btn-danger { background: var(--red); color: white; }
+  .btn-danger:hover { background: #E0342A; }
+
+  .main-layout {
+    display: grid;
+    grid-template-columns: 400px minmax(400px, 1fr);
+    gap: 40px;
+    padding: 32px 40px;
+    max-width: 1400px;
+    margin: 0 auto;
+    min-height: calc(100vh - 52px);
+  }
+
+  /* ===== Card System ===== */
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .card-header {
+    padding: 18px 24px 0;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .card-title {
+    font-size: 15px; font-weight: 600;
+    color: var(--text-primary); letter-spacing: -0.2px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .card-title .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+
+  /* ===== Hero Chart ===== */
+  .chart-card { display: flex; flex-direction: column; grid-column: 2; grid-row: 1; }
+
+  .chart-toolbar {
+    padding: 14px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .chart-legend {
+    display: flex; gap: 16px; align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-secondary); font-weight: 500;
+    cursor: pointer; transition: var(--transition-fast);
+  }
+  .legend-item:hover { color: var(--text-primary); }
+
+  .legend-swatch {
+    width: 20px; height: 3px; border-radius: 2px;
+  }
+
+  .legend-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+
+  .chart-container {
+    flex: 1; padding: 8px 16px 16px;
+    position: relative;
+    min-height: 480px;
+  }
+
+  #lpCanvas {
+    width: 100%; height: 100%;
+    display: block; border-radius: 12px;
+    cursor: crosshair;
+  }
+
+  .optimal-badge {
+    position: absolute; top: 24px; right: 24px;
+    background: var(--surface-blur);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    min-width: 160px;
+    box-shadow: var(--shadow-md);
+    transition: var(--transition);
+  }
+
+  .optimal-badge-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.8px;
+    text-transform: uppercase; color: var(--text-tertiary);
+    margin-bottom: 4px;
+  }
+
+  .optimal-badge-z {
+    font-size: 24px; font-weight: 700;
+    color: var(--text-primary); letter-spacing: -1px;
+    font-variant-numeric: tabular-nums;
+    transition: var(--transition);
+  }
+
+  .optimal-badge-coords {
+    font-size: 12px; color: var(--text-secondary);
+    font-family: var(--font-mono); margin-top: 2px;
+    transition: var(--transition);
+  }
+
+  /* ===== Sidebar ===== */
+  .sidebar {
+    display: flex; flex-direction: column; gap: 24px;
+    overflow-y: auto; max-height: calc(100vh - 92px);
+    scrollbar-width: none;
+    padding-bottom: 4px;
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .sidebar::-webkit-scrollbar { display: none; }
+
+  /* ===== Objective Card ===== */
+  .obj-display {
+    padding: 16px 24px 20px;
+    background: linear-gradient(135deg, rgba(0,113,227,0.06) 0%, rgba(64,200,224,0.06) 100%);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+  }
+
+  .obj-formula {
+    font-size: 16px; font-weight: 600; color: var(--accent);
+    font-family: var(--font-mono); letter-spacing: -0.3px;
+    margin-bottom: 6px;
+  }
+
+  .coefficient-row {
+    display: flex; gap: 10px; margin-top: 12px;
+  }
+
+  .coeff-item {
+    flex: 1; background: white; border-radius: var(--radius-sm);
+    padding: 10px 12px; border: 1px solid var(--border);
+    position: relative;
+  }
+
+  .coeff-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.6px;
+    text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 4px;
+  }
+
+  .coeff-val {
+    font-size: 20px; font-weight: 700; color: var(--text-primary);
+    font-variant-numeric: tabular-nums; letter-spacing: -0.5px;
+  }
+
+  /* ===== Constraint Sliders ===== */
+  .constraints-body { padding: 16px 24px 20px; }
+
+  .constraint-item {
+    margin-bottom: 24px;
+    transition: var(--transition);
+  }
+  .constraint-item:last-child { margin-bottom: 0; }
+
+  .constraint-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .constraint-name {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 600; color: var(--text-primary);
+  }
+
+  .constraint-badge {
+    font-size: 10px; font-weight: 700; padding: 2px 7px;
+    border-radius: 20px; letter-spacing: 0.5px; text-transform: uppercase;
+    transition: var(--transition);
+  }
+  .badge-binding { background: var(--accent-light); color: var(--accent); }
+  .badge-slack { background: var(--green-light); color: var(--green); }
+
+  .constraint-value {
+    font-size: 13px; font-weight: 600; color: var(--text-primary);
+    font-variant-numeric: tabular-nums; min-width: 36px; text-align: right;
+    transition: var(--transition);
+  }
+
+  .constraint-formula {
+    font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;
+    font-family: var(--font-mono);
+    display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+  }
+
+  .tech-coeff-input {
+    width: 38px; padding: 2px;
+    background: transparent;
+    border: none;
+    border-bottom: 1.5px dashed var(--text-tertiary);
+    font-family: var(--font-mono);
+    font-size: 12px; font-weight: 700;
+    color: var(--text-primary);
+    text-align: center;
+    outline: none;
+    transition: var(--transition-fast);
+    -moz-appearance: textfield;
+  }
+  .tech-coeff-input::-webkit-outer-spin-button,
+  .tech-coeff-input::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
+  }
+  .tech-coeff-input:hover, .tech-coeff-input:focus {
+    border-bottom-color: var(--accent);
+    background: rgba(0,0,0,0.03);
+  }
+
+  /* Custom Range Slider */
+  .slider-track { position: relative; height: 36px; display: flex; align-items: center; }
+
+  .slider-bg {
+    position: absolute; left: 0; right: 0; height: 6px;
+    background: var(--bg); border-radius: 3px; overflow: hidden;
+  }
+
+  .slider-fill {
+    height: 100%; border-radius: 3px;
+    transition: width var(--transition-fast);
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 36px; background: transparent;
+    position: relative; z-index: 1; cursor: pointer; outline: none;
+    margin: 0;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: white; cursor: pointer;
+    border: 2.5px solid;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.1);
+    transition: transform var(--transition-spring), box-shadow var(--transition-fast);
+  }
+
+  input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+
+  input[type="range"]::-webkit-slider-thumb:active {
+    transform: scale(1.1);
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: white; cursor: pointer;
+    border: 2.5px solid;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+
+  /* ===== Shadow Price Table ===== */
+  .shadow-body { padding: 0 24px 20px; }
+
+  .shadow-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+
+  .shadow-table th {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.8px;
+    text-transform: uppercase; color: var(--text-tertiary);
+    padding: 0 8px 8px; text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .shadow-table th:last-child { text-align: right; }
+
+  .shadow-row {
+    transition: var(--transition-fast); cursor: pointer;
+  }
+
+  .shadow-row:hover { background: var(--bg); border-radius: 8px; }
+  .shadow-row.highlighted { background: var(--accent-light); }
+
+  .shadow-row td {
+    padding: 9px 8px; font-size: 13px; vertical-align: middle;
+  }
+
+  .shadow-constraint { font-weight: 600; color: var(--text-primary); }
+
+  .shadow-price-val {
+    font-weight: 700; font-family: var(--font-mono);
+    font-size: 14px; text-align: right;
+    transition: var(--transition);
+  }
+
+  .price-positive { color: var(--green); }
+  .price-zero { color: var(--text-tertiary); }
+  .price-negative { color: var(--red); }
+
+  .pulse-line {
+    animation: pulseLine 1.2s ease-in-out infinite;
+  }
+
+  @keyframes pulseLine {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ===== Insights Card ===== */
+  .insights-body { padding: 12px 20px 20px; }
+
+  .insight-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px; border-radius: var(--radius-sm);
+    background: var(--bg); margin-bottom: 10px;
+    border: 1px solid var(--border);
+    transition: var(--transition-fast);
+    animation: slideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .insight-item:last-child { margin-bottom: 0; }
+  .insight-item:hover { background: white; box-shadow: var(--shadow-sm); }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .insight-icon {
+    width: 28px; height: 28px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0; margin-top: 1px;
+  }
+
+  .insight-text {
+    font-size: 12.5px; line-height: 1.5; color: var(--text-secondary);
+    font-weight: 400;
+  }
+
+  .insight-text strong { color: var(--text-primary); font-weight: 600; }
+
+  /* ===== Sensitivity Range ===== */
+  .sensitivity-body { padding: 12px 24px 20px; }
+
+  .range-item {
+    margin-bottom: 14px; padding: 12px;
+    background: var(--bg); border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+  }
+  .range-item:last-child { margin-bottom: 0; }
+
+  .range-label {
+    font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;
+  }
+
+  .range-bar-wrap {
+    position: relative; height: 6px; background: rgba(0,0,0,0.06);
+    border-radius: 3px; margin-bottom: 6px;
+  }
+
+  .range-bar-fill {
+    position: absolute; height: 100%; border-radius: 3px;
+    transition: var(--transition);
+  }
+
+  .range-current {
+    position: absolute; top: -3px; width: 12px; height: 12px;
+    border-radius: 50%; background: white;
+    border: 2.5px solid; transform: translateX(-50%);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    transition: left var(--transition);
+  }
+
+  .range-bounds {
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: var(--text-tertiary); font-family: var(--font-mono);
+    font-weight: 500;
+  }
+
+  /* ===== Collapsible ===== */
+  .collapsible-header {
+    padding: 14px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer; user-select: none;
+    transition: var(--transition-fast);
+  }
+  .collapsible-header:hover { background: rgba(0,0,0,0.02); }
+
+  .chevron {
+    width: 16px; height: 16px; color: var(--text-tertiary);
+    transition: transform var(--transition);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+  }
+  .chevron.open { transform: rotate(180deg); }
+
+  .collapsible-body { overflow: hidden; transition: max-height 0.35s cubic-bezier(0.4,0,0.2,1); }
+  .collapsible-body.collapsed { max-height: 0 !important; }
+
+  /* ===== Status Bar ===== */
+  .status-bar {
+    display: flex; gap: 8px; align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .status-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 600;
+    background: var(--green-light); color: var(--green);
+  }
+
+  .status-chip.infeasible {
+    background: rgba(255,59,48,0.1); color: var(--red);
+  }
+
+  /* ===== Toast ===== */
+  .toast {
+    position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: rgba(29,29,31,0.9); color: white;
+    padding: 10px 20px; border-radius: 20px;
+    font-size: 13px; font-weight: 500; letter-spacing: 0.1px;
+    backdrop-filter: blur(20px);
+    box-shadow: var(--shadow-lg); z-index: 9999;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
+    opacity: 0; white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+  /* ===== Spinner / Loading ===== */
+  .loading-overlay {
+    position: absolute; inset: 0; display: flex;
+    align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.8); border-radius: 12px;
+    z-index: 10; opacity: 0; pointer-events: none;
+    transition: var(--transition-fast);
+  }
+
+  /* ===== Scrollbar (sidebar) ===== */
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 960px) {
+    .main-layout { grid-template-columns: 1fr; padding: 16px; }
+    .sidebar { max-height: none; grid-column: 1; grid-row: 2; }
+    .chart-card { grid-column: 1; grid-row: 1; }
+  }
+
+  @media (min-width: 1400px) {
+    .main-layout {
+      max-width: 1680px;
+      grid-template-columns: 800px minmax(400px, 1fr);
+    }
+    .sidebar {
+      display: block;
+      column-count: 2;
+      column-gap: 24px;
+    }
+    .sidebar > .card {
+      break-inside: avoid;
+      page-break-inside: avoid;
+      margin-bottom: 24px;
+      display: inline-block;
+      width: 100%;
+    }
+    /* 智能洞察横跨两列底部 */
+    .sidebar > .card:nth-child(5) { 
+      column-span: all; 
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== App Header ===== -->
+<header class="app-header">
+  <div class="header-left">
+    <div class="app-icon">📐</div>
+    <div>
+      <div class="app-title">LP Sensitivity Analyzer</div>
+      <div class="app-subtitle">线性规划 · 影子价格 · 灵敏度分析</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <div class="status-bar" id="statusBar">
+      <span class="status-chip" id="feasibilityChip">
+        <svg width="6" height="6" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" fill="currentColor"/></svg>
+        可行解存在
+      </span>
+    </div>
+    <button class="btn btn-ghost" onclick="copyModel()">📋 复制模型</button>
+    <button class="btn btn-danger" onclick="resetModel()">↺ 重置</button>
+  </div>
+</header>
+
+<!-- ===== Main Layout ===== -->
+<main class="main-layout">
+
+  <!-- ===== Hero Chart ===== -->
+  <div class="card chart-card">
+    <div class="chart-toolbar">
+      <div class="card-title">
+        <div class="dot" style="background: var(--accent)"></div>
+        可行域与最优解
+      </div>
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-swatch" style="background:var(--accent)"></div>约束 C1</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:var(--orange)"></div>约束 C2</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:var(--purple)"></div>约束 C3</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:var(--green); border-style: dashed; height: 0; border-top: 2px dashed var(--green)"></div>目标函数</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>最优解</div>
+      </div>
+    </div>
+    <div class="chart-container">
+      <canvas id="lpCanvas"></canvas>
+      <div class="optimal-badge">
+        <div class="optimal-badge-label">Optimal Z*</div>
+        <div class="optimal-badge-z" id="badgeZ">—</div>
+        <div class="optimal-badge-coords" id="badgeCoords">x₁ = —, x₂ = —</div>
+      </div>
+      <div class="loading-overlay" id="loadingOverlay">⏳</div>
+    </div>
+  </div>
+
+  <!-- ===== Sidebar ===== -->
+  <aside class="sidebar">
+
+    <!-- Objective Function Card -->
+    <div class="card">
+      <div class="collapsible-header" onclick="toggleSection('objSection')">
+        <div class="card-title">
+          <div class="dot" style="background:var(--accent)"></div>
+          目标函数
+        </div>
+        <div class="chevron open" id="objChevron">▼</div>
+      </div>
+      <div class="collapsible-body" id="objSection" style="max-height:400px">
+        <div class="obj-display">
+          <div class="obj-formula" id="objFormula">Max Z = 5x₁ + 4x₂</div>
+          <div class="coefficient-row">
+            <div class="coeff-item">
+              <div class="coeff-label">c₁ 价值系数</div>
+              <div class="coeff-val" id="c1Val">5</div>
+              <input type="range" id="c1Slider" min="1" max="15" step="0.5" value="5"
+                oninput="updateCoefficient(0, this.value)" style="margin-top:4px; width:100%">
+            </div>
+            <div class="coeff-item">
+              <div class="coeff-label">c₂ 价值系数</div>
+              <div class="coeff-val" id="c2Val">4</div>
+              <input type="range" id="c2Slider" min="1" max="15" step="0.5" value="4"
+                oninput="updateCoefficient(1, this.value)" style="margin-top:4px; width:100%">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Constraints Card -->
+    <div class="card">
+      <div class="collapsible-header" onclick="toggleSection('constraintSection')">
+        <div class="card-title">
+          <div class="dot" style="background:var(--orange)"></div>
+          约束参数调节 (A & b)
+        </div>
+        <div class="chevron open" id="constraintChevron">▼</div>
+      </div>
+      <div class="collapsible-body" id="constraintSection" style="max-height:800px">
+        <div class="constraints-body" id="constraintsBody">
+          <!-- 动态生成 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Shadow Price Card -->
+    <div class="card">
+      <div class="collapsible-header" onclick="toggleSection('shadowSection')">
+        <div class="card-title">
+          <div class="dot" style="background:var(--purple)"></div>
+          影子价格 λ
+        </div>
+        <div class="chevron open" id="shadowChevron">▼</div>
+      </div>
+      <div class="collapsible-body" id="shadowSection" style="max-height:600px">
+        <div class="shadow-body">
+          <table class="shadow-table">
+            <thead>
+              <tr>
+                <th>约束</th>
+                <th>状态</th>
+                <th>λᵢ = ΔZ*/Δbᵢ</th>
+              </tr>
+            </thead>
+            <tbody id="shadowTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sensitivity Range Card -->
+    <div class="card">
+      <div class="collapsible-header" onclick="toggleSection('rangeSection')">
+        <div class="card-title">
+          <div class="dot" style="background:var(--teal)"></div>
+          灵敏度范围
+        </div>
+        <div class="chevron open" id="rangeChevron">▼</div>
+      </div>
+      <div class="collapsible-body" id="rangeSection" style="max-height:600px">
+        <div class="sensitivity-body" id="sensitivityBody"></div>
+      </div>
+    </div>
+
+    <!-- Insights Card -->
+    <div class="card">
+      <div class="collapsible-header" onclick="toggleSection('insightSection')">
+        <div class="card-title">
+          <div class="dot" style="background:var(--green)"></div>
+          💡 智能洞察
+        </div>
+        <div class="chevron open" id="insightChevron">▼</div>
+      </div>
+      <div class="collapsible-body" id="insightSection" style="max-height:800px">
+        <div class="insights-body" id="insightsBody"></div>
+      </div>
+    </div>
+
+  </aside>
+</main>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   LP Shadow Price & Sensitivity Analyzer
+   核心数学引擎 + 可视化逻辑
+   ========================================================= */
+
+// ===== 默认模型数据 =====
+// 线性规划问题：最大化目标函数 Z = 5x₁ + 4x₂
+// 约束条件：技术系数、资源限制、产能约束
+const DEFAULT_MODEL = {
+  c: [5, 4],       // 价值系数
+  constraints: [
+    { name: 'C1 技术系数', label: 'Technical Coefficient', color: '#0071E3', a: [6, 4], b: 24, bMin: 4, bMax: 48 },
+    { name: 'C2 资源限制', label: 'Resource Limit', color: '#FF9500', a: [1, 2], b: 6, bMin: 2, bMax: 20 },
+    { name: 'C3 产能约束', label: 'Capacity Constraint', color: '#AF52DE', a: [1, 0], b: 4, bMin: 1, bMax: 14 },
+  ]
+};
+
+// ===== 全局状态 =====
+let model = JSON.parse(JSON.stringify(DEFAULT_MODEL)); // 深拷贝
+let optimalSolution = null;      // 最优解 {x1, x2, z}
+let shadowPrices = [];           // 影子价格数组
+let highlightedConstraint = -1;  // 当前高亮约束索引
+let animFrame = null;            // requestAnimationFrame handle
+let prevOptimal = null;          // 上一帧最优解（用于插值动画）
+let animProgress = 1;            // 动画进度 0~1
+let renderTarget = null;         // 目标渲染状态（用于平滑过渡）
+
+// Canvas 与渲染上下文
+const canvas = document.getElementById('lpCanvas');
+const ctx = canvas.getContext('2d');
+
+/* ---------------------------------------------------------
+   数学工具函数
+   --------------------------------------------------------- */
+
+/**
+ * 计算两条直线的交点
+ * L1: a1*x + b1*y = c1
+ * L2: a2*x + b2*y = c2
+ * @returns {x, y} | null
+ */
+function getIntersection(a1, b1, c1, a2, b2, c2) {
+  const det = a1 * b2 - a2 * b1;
+  if (Math.abs(det) < 1e-10) return null; // 平行线
+  const x = (c1 * b2 - c2 * b1) / det;
+  const y = (a1 * c2 - a2 * c1) / det;
+  return { x, y };
+}
+
+/**
+ * 检查点 (x,y) 是否在所有约束的可行域内（含非负约束）
+ * @param {number} x
+ * @param {number} y
+ * @returns {boolean}
+ */
+function isFeasible(x, y) {
+  if (x < -1e-8 || y < -1e-8) return false;
+  for (const con of model.constraints) {
+    if (con.a[0] * x + con.a[1] * y > con.b + 1e-8) return false;
+  }
+  return true;
+}
+
+/**
+ * 顶点枚举法：获取可行域的所有顶点
+ * 遍历所有约束对（含坐标轴）的交点，筛选可行点
+ * @returns {Array<{x, y}>}
+ */
+function getVertices() {
+  const lines = [...model.constraints.map(c => ({
+    a: c.a[0], b: c.a[1], rhs: c.b
+  }))];
+  // 加入坐标轴边界
+  lines.push({ a: 1, b: 0, rhs: 0 }); // x1 >= 0 → x1 = 0
+  lines.push({ a: 0, b: 1, rhs: 0 }); // x2 >= 0 → x2 = 0
+
+  const vertices = [];
+  for (let i = 0; i < lines.length; i++) {
+    for (let j = i + 1; j < lines.length; j++) {
+      const pt = getIntersection(
+        lines[i].a, lines[i].b, lines[i].rhs,
+        lines[j].a, lines[j].b, lines[j].rhs
+      );
+      if (pt && isFeasible(pt.x, pt.y)) {
+        vertices.push({ x: Math.max(0, pt.x), y: Math.max(0, pt.y) });
+      }
+    }
+  }
+
+  // 去重（距离阈值）
+  const unique = [];
+  for (const v of vertices) {
+    const dup = unique.some(u => Math.hypot(u.x - v.x, u.y - v.y) < 1e-6);
+    if (!dup) unique.push(v);
+  }
+  return unique;
+}
+
+/**
+ * 求解 LP：遍历顶点，找最大化目标值的最优顶点
+ * @returns {{ x1, x2, z } | null}
+ */
+function solveLP() {
+  const vertices = getVertices();
+  if (vertices.length === 0) return null;
+
+  let best = null;
+  let bestZ = -Infinity;
+  for (const v of vertices) {
+    const z = model.c[0] * v.x + model.c[1] * v.y;
+    if (z > bestZ) {
+      bestZ = z;
+      best = { x1: v.x, x2: v.y, z };
+    }
+  }
+  return best;
+}
+
+/**
+ * 计算第 i 个约束的影子价格（数值微分法）
+ * λᵢ ≈ ΔZ* / Δbᵢ
+ * @param {number} i 约束索引
+ * @param {number} delta 微分步长
+ * @returns {number}
+ */
+function computeShadowPrice(i, delta = 0.01) {
+  const origB = model.constraints[i].b;
+
+  // 扰动 b_i + δ
+  model.constraints[i].b = origB + delta;
+  const solPlus = solveLP();
+
+  // 扰动 b_i - δ
+  model.constraints[i].b = origB - delta;
+  const solMinus = solveLP();
+
+  // 恢复
+  model.constraints[i].b = origB;
+
+  if (!solPlus || !solMinus) return 0;
+  // 中心差分
+  const shadowPrice = (solPlus.z - solMinus.z) / (2 * delta);
+  return Math.round(shadowPrice * 1000) / 1000;
+}
+
+/**
+ * 判断约束 i 是否为紧致约束（binding）
+ * 松弛量 = b_i - (a*x*) ≈ 0
+ */
+function isBinding(i, sol) {
+  if (!sol) return false;
+  const con = model.constraints[i];
+  const slack = con.b - (con.a[0] * sol.x1 + con.a[1] * sol.x2);
+  return Math.abs(slack) < 1e-6;
+}
+
+/**
+ * 计算约束 i 的灵敏度范围（b_i 可变化的区间使基保持不变）
+ * 使用简单扫描法
+ */
+function computeSensitivityRange(i) {
+  const origB = model.constraints[i].b;
+  const origSol = solveLP();
+  if (!origSol) return { lo: origB * 0.5, hi: origB * 2 };
+
+  // 找到活跃基（与最优解相关的约束集）
+  const origActiveSet = model.constraints.map((_, idx) => isBinding(idx, origSol));
+
+  let lo = origB * 0.1;
+  let hi = origB * 3;
+
+  // 向上扫描
+  for (let b = origB; b <= origB * 4; b += 0.1) {
+    model.constraints[i].b = b;
+    const s = solveLP();
+    if (!s) { hi = b - 0.1; break; }
+    const newActive = model.constraints.map((_, idx) => isBinding(idx, s));
+    const changed = newActive.some((v, idx) => v !== origActiveSet[idx]);
+    if (changed) { hi = b; break; } else { hi = b; }
+  }
+
+  // 向下扫描
+  for (let b = origB; b >= 0.1; b -= 0.1) {
+    model.constraints[i].b = b;
+    const s = solveLP();
+    if (!s) { lo = b + 0.1; break; }
+    const newActive = model.constraints.map((_, idx) => isBinding(idx, s));
+    const changed = newActive.some((v, idx) => v !== origActiveSet[idx]);
+    if (changed) { lo = b; break; } else { lo = b; }
+  }
+
+  model.constraints[i].b = origB;
+  return {
+    lo: Math.max(0.1, Math.round(lo * 10) / 10),
+    hi: Math.round(hi * 10) / 10
+  };
+}
+
+/* ---------------------------------------------------------
+   Canvas 渲染引擎
+   --------------------------------------------------------- */
+
+// 坐标系参数（canvas 坐标 ↔ 数学坐标的映射）
+function getAxisScale() {
+  const w = canvas.width;
+  const h = canvas.height;
+  const pad = { left: 52, right: 24, top: 24, bottom: 48 };
+  const xMax = 12;  // x₁ 轴最大值
+  const yMax = 12;  // x₂ 轴最大值
+  const scaleX = (w - pad.left - pad.right) / xMax;
+  const scaleY = (h - pad.top - pad.bottom) / yMax;
+  return { w, h, pad, xMax, yMax, scaleX, scaleY };
+}
+
+// 数学坐标 → Canvas 像素
+function toPixel(mx, my) {
+  const { pad, scaleX, scaleY, h } = getAxisScale();
+  return {
+    px: pad.left + mx * scaleX,
+    py: h - pad.bottom - my * scaleY
+  };
+}
+
+// Canvas 像素 → 数学坐标
+function toMath(px, py) {
+  const { pad, scaleX, scaleY, h } = getAxisScale();
+  return {
+    mx: (px - pad.left) / scaleX,
+    my: (h - pad.bottom - py) / scaleY
+  };
+}
+
+/** 绘制坐标轴与网格 */
+function drawAxes() {
+  const { w, h, pad, xMax, yMax } = getAxisScale();
+  const dpr = window.devicePixelRatio || 1;
+
+  ctx.save();
+
+  // 网格线
+  ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= xMax; x++) {
+    const { px } = toPixel(x, 0);
+    ctx.beginPath(); ctx.moveTo(px, pad.top); ctx.lineTo(px, h - pad.bottom); ctx.stroke();
+  }
+  for (let y = 0; y <= yMax; y++) {
+    const { py } = toPixel(0, y);
+    ctx.beginPath(); ctx.moveTo(pad.left, py); ctx.lineTo(w - pad.right, py); ctx.stroke();
+  }
+
+  // 轴线
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = 1.5;
+  const origin = toPixel(0, 0);
+  ctx.beginPath(); ctx.moveTo(pad.left, origin.py); ctx.lineTo(w - pad.right, origin.py); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(origin.px, pad.top); ctx.lineTo(origin.px, h - pad.bottom); ctx.stroke();
+
+  // 轴标签
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.font = `${10 * dpr}px ${getComputedStyle(document.body).fontFamily}`;
+  ctx.textAlign = 'center';
+  for (let x = 0; x <= xMax; x += 2) {
+    const { px } = toPixel(x, 0);
+    ctx.fillText(x, px, h - pad.bottom + 14);
+  }
+  ctx.textAlign = 'right';
+  for (let y = 0; y <= yMax; y += 2) {
+    const { py } = toPixel(0, y);
+    ctx.fillText(y, pad.left - 6, py + 4);
+  }
+
+  // 轴名称
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.font = `bold ${11 * dpr}px ${getComputedStyle(document.body).fontFamily}`;
+  ctx.textAlign = 'center';
+  ctx.fillText('x₁', w - pad.right - 4, h - pad.bottom + 14);
+  ctx.save();
+  ctx.translate(pad.left - 36, pad.top + 20);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('x₂', 0, 0);
+  ctx.restore();
+
+  ctx.restore();
+}
+
+/** 绘制可行域（多边形填充） */
+function drawFeasibleRegion(vertices) {
+  if (!vertices || vertices.length < 3) return;
+
+  // 按极角排序顶点，形成凸多边形
+  const cx = vertices.reduce((s, v) => s + v.x, 0) / vertices.length;
+  const cy = vertices.reduce((s, v) => s + v.y, 0) / vertices.length;
+  const sorted = [...vertices].sort((a, b) =>
+    Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx)
+  );
+
+  ctx.save();
+  ctx.beginPath();
+  sorted.forEach((v, i) => {
+    const { px, py } = toPixel(v.x, v.y);
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  });
+  ctx.closePath();
+
+  // 半透明 SF Blue 填充
+  const { pad, w, h } = getAxisScale();
+  const gradient = ctx.createLinearGradient(pad.left, pad.top, w, h);
+  gradient.addColorStop(0, 'rgba(0,113,227,0.15)');
+  gradient.addColorStop(1, 'rgba(64,200,224,0.10)');
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(0,113,227,0.3)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+/** 绘制约束直线 */
+function drawConstraintLine(con, index, isHighlighted) {
+  const { xMax, yMax } = getAxisScale();
+  const [a, b] = con.a;
+  const rhs = con.b;
+  const color = con.color;
+
+  // 求直线与坐标轴/边界的两个端点
+  const pts = [];
+  // 与 x=0 的交点: b*y = rhs → y = rhs/b
+  if (Math.abs(b) > 1e-10) {
+    const y0 = rhs / b;
+    if (y0 >= -1e-8 && y0 <= yMax + 1e-8) pts.push({ x: 0, y: y0 });
+  }
+  // 与 x=xMax 的交点
+  if (Math.abs(b) > 1e-10) {
+    const y1 = (rhs - a * xMax) / b;
+    if (y1 >= -1e-8 && y1 <= yMax + 1e-8) pts.push({ x: xMax, y: y1 });
+  }
+  // 与 y=0 的交点
+  if (Math.abs(a) > 1e-10) {
+    const x0 = rhs / a;
+    if (x0 >= -1e-8 && x0 <= xMax + 1e-8) pts.push({ x: x0, y: 0 });
+  }
+  // 与 y=yMax 的交点
+  if (Math.abs(a) > 1e-10) {
+    const x1 = (rhs - b * yMax) / a;
+    if (x1 >= -1e-8 && x1 <= xMax + 1e-8) pts.push({ x: x1, y: yMax });
+  }
+
+  if (pts.length < 2) return;
+
+  ctx.save();
+
+  if (isHighlighted) {
+    // 脉冲高亮效果
+    const t = (Date.now() % 1200) / 1200;
+    const pulse = 0.4 + 0.6 * Math.abs(Math.sin(t * Math.PI));
+    ctx.globalAlpha = pulse;
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+  } else {
+    ctx.globalAlpha = 0.85;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+  }
+
+  const p0 = toPixel(pts[0].x, pts[0].y);
+  const p1 = toPixel(pts[1].x, pts[1].y);
+
+  ctx.beginPath();
+  ctx.moveTo(p0.px, p0.py);
+  ctx.lineTo(p1.px, p1.py);
+  ctx.stroke();
+
+  // 标签
+  ctx.globalAlpha = 0.85;
+  ctx.shadowBlur = 0;
+  ctx.font = `bold 11px ${getComputedStyle(document.body).fontFamily}`;
+  ctx.fillStyle = color;
+  const midPx = (p0.px + p1.px) / 2;
+  const midPy = (p0.py + p1.py) / 2;
+  // 小标签背景
+  const label = `C${index + 1}`;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.fillText(label, midPx + 10, midPy - 6);
+
+  ctx.restore();
+}
+
+/** 绘制目标函数等值线（通过最优解的虚线） */
+function drawObjectiveLine(sol) {
+  if (!sol) return;
+  const { xMax, yMax } = getAxisScale();
+  const [c1, c2] = model.c;
+  const z = sol.z;
+
+  // c1*x + c2*y = z → y = (z - c1*x) / c2
+  const pts = [];
+  if (Math.abs(c2) > 1e-10) {
+    const y0 = z / c2;
+    if (y0 >= -1e-8 && y0 <= yMax + 1e-8) pts.push({ x: 0, y: y0 });
+    const yMax2 = (z - c1 * xMax) / c2;
+    if (yMax2 >= -1e-8 && yMax2 <= yMax + 1e-8) pts.push({ x: xMax, y: yMax2 });
+  }
+  if (Math.abs(c1) > 1e-10) {
+    const x0 = z / c1;
+    if (x0 >= -1e-8 && x0 <= xMax + 1e-8) pts.push({ x: x0, y: 0 });
+    const x1 = (z - c2 * yMax) / c1;
+    if (x1 >= -1e-8 && x1 <= xMax + 1e-8) pts.push({ x: x1, y: yMax });
+  }
+
+  if (pts.length < 2) return;
+
+  ctx.save();
+  ctx.strokeStyle = '#34C759';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 5]);
+  ctx.globalAlpha = 0.7;
+
+  const p0 = toPixel(pts[0].x, pts[0].y);
+  const p1 = toPixel(pts[1].x, pts[1].y);
+  ctx.beginPath(); ctx.moveTo(p0.px, p0.py); ctx.lineTo(p1.px, p1.py); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+/** 绘制最优解点（带光晕和动画） */
+function drawOptimalPoint(sol, alpha = 1) {
+  if (!sol) return;
+  const { px, py } = toPixel(sol.x1, sol.x2);
+  const dpr = window.devicePixelRatio || 1;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // 外圈光晕（脉冲）
+  const t = (Date.now() % 2000) / 2000;
+  const pulseR = 16 + 6 * Math.sin(t * Math.PI * 2);
+  const pulseAlpha = 0.15 + 0.1 * Math.sin(t * Math.PI * 2);
+  ctx.beginPath();
+  ctx.arc(px, py, pulseR, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(255,59,48,${pulseAlpha})`;
+  ctx.fill();
+
+  // 外圈
+  ctx.beginPath();
+  ctx.arc(px, py, 10, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,59,48,0.2)';
+  ctx.fill();
+
+  // 内点
+  ctx.beginPath();
+  ctx.arc(px, py, 6, 0, Math.PI * 2);
+  ctx.fillStyle = '#FF3B30';
+  ctx.shadowColor = 'rgba(255,59,48,0.5)';
+  ctx.shadowBlur = 10;
+  ctx.fill();
+
+  // 坐标标签
+  ctx.globalAlpha = alpha * 0.9;
+  ctx.shadowBlur = 0;
+  ctx.font = `bold ${10.5 * dpr}px ${getComputedStyle(document.body).fontFamily}`;
+  ctx.fillStyle = '#FF3B30';
+  ctx.textAlign = 'left';
+  const label = `(${sol.x1.toFixed(2)}, ${sol.x2.toFixed(2)})`;
+  // 小标签背景
+  const tw = ctx.measureText(label).width + 10;
+  const tx = px + 12;
+  const ty = py - 10;
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.beginPath();
+  roundRect(ctx, tx - 2, ty - 12, tw, 16, 4);
+  ctx.fill();
+  ctx.fillStyle = '#FF3B30';
+  ctx.fillText(label, tx + 3, ty);
+
+  ctx.restore();
+}
+
+/** 辅助：圆角矩形 */
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+/** 主渲染函数（每帧调用） */
+function render() {
+  // 自适应 DPR
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (canvas.width !== rect.width * dpr || canvas.height !== rect.height * dpr) {
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+  }
+
+  const { w, h } = getAxisScale();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 浅灰背景
+  ctx.fillStyle = '#F9F9FB';
+  roundRect(ctx, 0, 0, w, h, 12);
+  ctx.fill();
+
+  drawAxes();
+
+  // 可行域
+  const vertices = getVertices();
+  drawFeasibleRegion(vertices);
+
+  // 约束线
+  for (let i = 0; i < model.constraints.length; i++) {
+    drawConstraintLine(model.constraints[i], i, i === highlightedConstraint);
+  }
+
+  // 目标函数等值线
+  if (optimalSolution) {
+    drawObjectiveLine(optimalSolution);
+    drawOptimalPoint(optimalSolution);
+  }
+
+  // 继续循环（用于脉冲动画）
+  animFrame = requestAnimationFrame(render);
+}
+
+/* ---------------------------------------------------------
+   UI 更新逻辑
+   --------------------------------------------------------- */
+
+/** 完整更新：重新求解 + 更新所有 UI 组件 */
+function fullUpdate() {
+  // 求解
+  optimalSolution = solveLP();
+
+  // 计算影子价格
+  shadowPrices = model.constraints.map((_, i) => computeShadowPrice(i));
+
+  // 更新最优解徽章
+  updateOptimalBadge();
+
+  // 更新约束面板
+  updateConstraintPanel();
+
+  // 更新影子价格表
+  updateShadowTable();
+
+  // 更新灵敏度范围
+  updateSensitivityRanges();
+
+  // 更新智能洞察
+  updateInsights();
+
+  // 更新目标函数公式
+  updateObjectiveFormula();
+}
+
+function updateOptimalBadge() {
+  const zEl = document.getElementById('badgeZ');
+  const coordEl = document.getElementById('badgeCoords');
+  const chip = document.getElementById('feasibilityChip');
+
+  if (optimalSolution) {
+    zEl.textContent = optimalSolution.z.toFixed(2);
+    coordEl.textContent = `x₁ = ${optimalSolution.x1.toFixed(3)}, x₂ = ${optimalSolution.x2.toFixed(3)}`;
+    chip.className = 'status-chip';
+    chip.innerHTML = `<svg width="6" height="6" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" fill="currentColor"/></svg> 可行解存在`;
+  } else {
+    zEl.textContent = '—';
+    coordEl.textContent = '无可行解';
+    chip.className = 'status-chip infeasible';
+    chip.innerHTML = `<svg width="6" height="6" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" fill="currentColor"/></svg> 不可行`;
+  }
+}
+
+function updateObjectiveFormula() {
+  const [c1, c2] = model.c;
+  document.getElementById('objFormula').textContent =
+    `Max Z = ${c1}x₁ + ${c2}x₂`;
+  document.getElementById('c1Val').textContent = c1;
+  document.getElementById('c2Val').textContent = c2;
+}
+
+function updateConstraintPanel() {
+  const body = document.getElementById('constraintsBody');
+  const needsInit = body.children.length !== model.constraints.length;
+  if (needsInit) body.innerHTML = '';
+
+  model.constraints.forEach((con, i) => {
+    const binding = isBinding(i, optimalSolution);
+    const slack = optimalSolution
+      ? (con.b - (con.a[0] * optimalSolution.x1 + con.a[1] * optimalSolution.x2)).toFixed(2)
+      : '—';
+    const pct = ((con.b - con.bMin) / (con.bMax - con.bMin) * 100).toFixed(1);
+
+    if (needsInit) {
+      const div = document.createElement('div');
+      div.className = 'constraint-item';
+      div.innerHTML = `
+        <div class="constraint-header">
+          <div class="constraint-name">
+            <div style="width:10px;height:10px;border-radius:3px;background:${con.color}"></div>
+            ${con.name}
+            <span id="conBadge${i}" class="constraint-badge ${binding ? 'badge-binding' : 'badge-slack'}">
+              ${binding ? '紧致 (Binding)' : `松弛量 ${slack}`}
+            </span>
+          </div>
+          <span class="constraint-value" id="bVal${i}">${con.b}</span>
+        </div>
+        <div class="constraint-formula">
+          <input type="number" class="tech-coeff-input" id="a0_Val${i}" value="${con.a[0]}" step="0.5"
+            oninput="updateTechCoeff(${i}, 0, this.value)" style="color:${con.color}"> x₁ 
+          + 
+          <input type="number" class="tech-coeff-input" id="a1_Val${i}" value="${con.a[1]}" step="0.5"
+            oninput="updateTechCoeff(${i}, 1, this.value)" style="color:${con.color}"> x₂ 
+          ≤ <span id="bFormulaVal${i}">${con.b}</span>
+        </div>
+        <div class="slider-track">
+          <div class="slider-bg">
+            <div class="slider-fill" id="sliderFill${i}" style="width:${pct}%; background:${con.color}40"></div>
+          </div>
+          <input type="range" id="bSlider${i}"
+            min="${con.bMin}" max="${con.bMax}" step="0.5" value="${con.b}"
+            style="--thumb-color:${con.color}"
+            oninput="updateConstraintB(${i}, this.value)">
+        </div>
+      `;
+      // 设置滑块 thumb 颜色
+      const style = document.createElement('style');
+      style.textContent = `
+        #bSlider${i}::-webkit-slider-thumb { border-color: ${con.color}; }
+        #bSlider${i}::-moz-range-thumb { border-color: ${con.color}; }
+      `;
+      document.head.appendChild(style);
+      body.appendChild(div);
+    } else {
+      // 避免重建 DOM，直接更新数据，解决拖动卡顿问题
+      const badgeEl = document.getElementById(`conBadge${i}`);
+      const valEl = document.getElementById(`bVal${i}`);
+      const fillEl = document.getElementById(`sliderFill${i}`);
+      const sliderEl = document.getElementById(`bSlider${i}`);
+      
+      if (badgeEl) {
+        badgeEl.className = `constraint-badge ${binding ? 'badge-binding' : 'badge-slack'}`;
+        badgeEl.textContent = binding ? '紧致 (Binding)' : `松弛量 ${slack}`;
+      }
+      if (valEl) valEl.textContent = con.b;
+      if (fillEl) fillEl.style.width = pct + '%';
+      if (sliderEl && sliderEl.value != con.b) sliderEl.value = con.b;
+      
+      const fValEl = document.getElementById(`bFormulaVal${i}`);
+      if (fValEl) fValEl.textContent = con.b;
+      const a0El = document.getElementById(`a0_Val${i}`);
+      const a1El = document.getElementById(`a1_Val${i}`);
+      if (a0El && a0El.value != con.a[0]) a0El.value = con.a[0];
+      if (a1El && a1El.value != con.a[1]) a1El.value = con.a[1];
+    }
+  });
+}
+
+function updateShadowTable() {
+  const tbody = document.getElementById('shadowTableBody');
+  tbody.innerHTML = '';
+
+  model.constraints.forEach((con, i) => {
+    const λ = shadowPrices[i];
+    const binding = isBinding(i, optimalSolution);
+    const priceClass = λ > 0.001 ? 'price-positive' : (λ < -0.001 ? 'price-negative' : 'price-zero');
+
+    const tr = document.createElement('tr');
+    tr.className = 'shadow-row';
+    tr.dataset.index = i;
+    tr.innerHTML = `
+      <td>
+        <span style="display:inline-flex;align-items:center;gap:6px">
+          <span style="width:8px;height:8px;border-radius:2px;background:${con.color};display:inline-block"></span>
+          <span class="shadow-constraint">${con.name.replace(/C\d+ /, '')}</span>
+        </span>
+      </td>
+      <td>
+        <span class="constraint-badge ${binding ? 'badge-binding' : 'badge-slack'}" style="font-size:10px">
+          ${binding ? '紧致' : '松弛'}
+        </span>
+      </td>
+      <td><span class="shadow-price-val ${priceClass}">${λ > 0.001 ? '+' : ''}${λ.toFixed(3)}</span></td>
+    `;
+
+    // 悬停高亮
+    tr.addEventListener('mouseenter', () => {
+      highlightedConstraint = i;
+      tr.classList.add('highlighted');
+    });
+    tr.addEventListener('mouseleave', () => {
+      highlightedConstraint = -1;
+      tr.classList.remove('highlighted');
+    });
+
+    tbody.appendChild(tr);
+  });
+}
+
+function updateSensitivityRanges() {
+  const body = document.getElementById('sensitivityBody');
+  body.innerHTML = '';
+
+  model.constraints.forEach((con, i) => {
+    const { lo, hi } = computeSensitivityRange(i);
+    const cur = con.b;
+    const pct = Math.min(100, Math.max(0, ((cur - lo) / (hi - lo) * 100)));
+
+    const div = document.createElement('div');
+    div.className = 'range-item';
+    div.innerHTML = `
+      <div class="range-label" style="color:${con.color}">${con.name}</div>
+      <div class="range-bar-wrap">
+        <div class="range-bar-fill" style="background:${con.color}30;width:100%"></div>
+        <div class="range-bar-fill" style="background:${con.color};width:${pct}%"></div>
+        <div class="range-current" style="left:${pct}%;border-color:${con.color}"></div>
+      </div>
+      <div class="range-bounds">
+        <span>${lo.toFixed(1)}</span>
+        <span style="color:${con.color};font-weight:600">当前 ${cur}</span>
+        <span>${hi.toFixed(1)}</span>
+      </div>
+    `;
+    body.appendChild(div);
+  });
+}
+
+function updateInsights() {
+  const body = document.getElementById('insightsBody');
+  body.innerHTML = '';
+
+  if (!optimalSolution) {
+    body.innerHTML = '<div class="insight-item"><div class="insight-icon" style="background:rgba(255,59,48,0.1)">⚠️</div><div class="insight-text">当前参数下<strong>无可行解</strong>，请尝试放宽约束条件。</div></div>';
+    return;
+  }
+
+  const insights = [];
+
+  // 最优解洞察
+  insights.push({
+    icon: '🎯', bg: 'rgba(0,113,227,0.1)',
+    text: `当前最优目标函数值 <strong>Z* = ${optimalSolution.z.toFixed(2)}</strong>，在决策解向量 X* = (${optimalSolution.x1.toFixed(2)}, ${optimalSolution.x2.toFixed(2)}) 处取得。`
+  });
+
+  // 影子价格洞察
+  const bindingConstraints = model.constraints.filter((_, i) => isBinding(i, optimalSolution));
+  const slackConstraints = model.constraints.filter((_, i) => !isBinding(i, optimalSolution));
+
+  model.constraints.forEach((con, i) => {
+    const λ = shadowPrices[i];
+    if (Math.abs(λ) > 0.001) {
+      const direction = λ > 0 ? '增加' : '减少';
+      const change = Math.abs(λ).toFixed(3);
+      insights.push({
+        icon: '💰', bg: 'rgba(52,199,89,0.1)',
+        text: `对于 <strong>${con.name.replace(/C\d+ /, '')} (${con.label})</strong>，其右端项常数每增加一个单位，目标函数最优值将${direction} <strong>${change}</strong>（对偶变量/影子价格 λ = ${λ > 0 ? '+' : ''}${λ.toFixed(3)}）。`
+      });
+    }
+  });
+
+  if (slackConstraints.length > 0) {
+    const names = slackConstraints.map(c => c.name.replace(/C\d+ /, '')).join('、');
+    insights.push({
+      icon: '📊', bg: 'rgba(255,149,0,0.1)',
+      text: `约束 <strong>${names}</strong> 当前属于非紧致约束（松弛变量 > 0），增加此类约束的右端项容限无法进一步改善目标函数最优值。`
+    });
+  }
+
+  if (bindingConstraints.length > 0) {
+    const names = bindingConstraints.map(c => c.name.replace(/C\d+ /, '')).join('、');
+    insights.push({
+      icon: '🔗', bg: 'rgba(175,82,222,0.1)',
+      text: `约束 <strong>${names}</strong> 为紧致约束（松弛变量 = 0），对系统目标值起决定性限制作用，属于当前最优解的基变量集合。`
+    });
+  }
+
+  insights.forEach((ins, idx) => {
+    const div = document.createElement('div');
+    div.className = 'insight-item';
+    div.style.animationDelay = `${idx * 0.06}s`;
+    div.innerHTML = `
+      <div class="insight-icon" style="background:${ins.bg}">${ins.icon}</div>
+      <div class="insight-text">${ins.text}</div>
+    `;
+    body.appendChild(div);
+  });
+}
+
+/* ---------------------------------------------------------
+   交互事件处理
+   --------------------------------------------------------- */
+
+/** 更新约束 b_i 值 */
+function updateConstraintB(index, value) {
+  model.constraints[index].b = parseFloat(value);
+  const pct = ((value - model.constraints[index].bMin) /
+    (model.constraints[index].bMax - model.constraints[index].bMin) * 100).toFixed(1);
+
+  // 快速更新显示值
+  const valEl = document.getElementById(`bVal${index}`);
+  const fillEl = document.getElementById(`sliderFill${index}`);
+  if (valEl) valEl.textContent = parseFloat(value).toFixed(1);
+  if (fillEl) fillEl.style.width = pct + '%';
+
+  const fValEl = document.getElementById(`bFormulaVal${index}`);
+  if (fValEl) fValEl.textContent = parseFloat(value).toFixed(1);
+
+  // 防抖全量更新（降低延迟，提高灵敏度）
+  clearTimeout(updateConstraintB._debounce);
+  updateConstraintB._debounce = setTimeout(fullUpdate, 10);
+}
+
+/** 更新目标函数系数 */
+function updateCoefficient(index, value) {
+  model.c[index] = parseFloat(value);
+  clearTimeout(updateCoefficient._debounce);
+  updateCoefficient._debounce = setTimeout(fullUpdate, 10);
+}
+
+/** 更新技术系数 (A) */
+function updateTechCoeff(constIndex, varIndex, value) {
+  const val = parseFloat(value);
+  if (isNaN(val)) return;
+  model.constraints[constIndex].a[varIndex] = val;
+  clearTimeout(updateTechCoeff._debounce);
+  updateTechCoeff._debounce = setTimeout(fullUpdate, 10);
+}
+
+/** 折叠/展开面板 */
+function toggleSection(id) {
+  const body = document.getElementById(id);
+  const chevronId = id.replace('Section', 'Chevron');
+  const chevron = document.getElementById(chevronId);
+  const isCollapsed = body.classList.contains('collapsed');
+
+  if (isCollapsed) {
+    body.classList.remove('collapsed');
+    if (chevron) chevron.classList.add('open');
+  } else {
+    body.classList.add('collapsed');
+    if (chevron) chevron.classList.remove('open');
+  }
+}
+
+/** 重置到默认模型 */
+function resetModel() {
+  model = JSON.parse(JSON.stringify(DEFAULT_MODEL));
+  document.getElementById('c1Slider').value = model.c[0];
+  document.getElementById('c2Slider').value = model.c[1];
+  fullUpdate();
+  showToast('✅ 已重置为标准案例');
+}
+
+/** 复制当前模型描述 */
+function copyModel() {
+  if (!optimalSolution) {
+    showToast('⚠️ 当前无可行解');
+    return;
+  }
+  const lines = [
+    `Max Z = ${model.c[0]}x₁ + ${model.c[1]}x₂`,
+    'Subject to:',
+    ...model.constraints.map((c, i) =>
+      `  ${c.a[0]}x₁ + ${c.a[1]}x₂ ≤ ${c.b}  [λ${i + 1} = ${shadowPrices[i].toFixed(3)}]`
+    ),
+    '  x₁, x₂ ≥ 0',
+    `Optimal: Z* = ${optimalSolution.z.toFixed(4)}`,
+    `  x₁* = ${optimalSolution.x1.toFixed(4)}, x₂* = ${optimalSolution.x2.toFixed(4)}`
+  ];
+  navigator.clipboard.writeText(lines.join('\n')).then(() =>
+    showToast('📋 模型已复制到剪贴板')
+  );
+}
+
+/** Toast 通知 */
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(showToast._timeout);
+  showToast._timeout = setTimeout(() => toast.classList.remove('show'), 2200);
+}
+
+/* ---------------------------------------------------------
+   初始化
+   --------------------------------------------------------- */
+window.addEventListener('load', () => {
+  fullUpdate();
+  render(); // 启动渲染循环
+});
+
+// 窗口大小改变时重绘
+window.addEventListener('resize', () => {
+  cancelAnimationFrame(animFrame);
+  render();
+});
+</script>
+</body>
+</html>
